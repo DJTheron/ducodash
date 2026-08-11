@@ -7,7 +7,9 @@
   point is the one thing unit tests can't cover: it proves DexScreener, the BNB Chain
   RPC and TronGrid all allow browser CORS from a static origin.
 
-  Usage: npm run build && node scripts/live-check.mjs [username]
+  Usage:
+    npm run build && node scripts/live-check.mjs [username]        # local dist
+    node scripts/live-check.mjs [username] https://…/ducodash/     # deployed site
 */
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -16,6 +18,8 @@ import { globSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 
 const USER = process.argv[2] ?? 'MMorcego';
+/** Optional deployed URL. Without it the local `dist/` is served instead. */
+const REMOTE = process.argv[3]?.startsWith('http') ? process.argv[3].replace(/\/$/, '') : null;
 const DIST = new URL('../dist/', import.meta.url).pathname;
 const OUT = new URL('../shots/', import.meta.url).pathname;
 const BASE = '/ducodash/';
@@ -42,7 +46,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(404).end('not found');
   }
 });
-await new Promise((resolve) => server.listen(PORT, resolve));
+if (!REMOTE) await new Promise((resolve) => server.listen(PORT, resolve));
 await mkdir(OUT, { recursive: true });
 
 const [exe] = globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome');
@@ -67,7 +71,9 @@ const failures = [];
 page.on('requestfailed', (r) => failures.push(`${r.url().slice(0, 90)} — ${r.failure()?.errorText}`));
 page.on('pageerror', (e) => failures.push(`pageerror: ${String(e).slice(0, 200)}`));
 
-await page.goto(`http://localhost:${PORT}${BASE}?u=${encodeURIComponent(USER)}`, {
+const target = REMOTE ?? `http://localhost:${PORT}${BASE}`;
+console.log(`loading ${target}`);
+await page.goto(`${target}/?u=${encodeURIComponent(USER)}`.replace(/([^:])\/\//g, '$1/'), {
   waitUntil: 'load',
 });
 
@@ -93,4 +99,4 @@ await page.screenshot({ path: join(OUT, 'live.png'), animations: 'disabled', tim
 console.log(`\nshots/live.png`);
 
 await browser.close();
-server.close();
+if (!REMOTE) server.close();

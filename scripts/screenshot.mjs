@@ -65,6 +65,13 @@ const shots = [
   { name: 'mobile-hero', width: 414, height: 820, full: false, scale: 2 },
   // Committed for the README, so kept at 1x to stay a sensible size in git.
   { name: 'preview', width: 1280, height: 760, full: false, scale: 1, dir: DOCS },
+
+  // One per card-density tier. Card geometry changes at 6 and 24 rigs, and those
+  // two layouts are otherwise unreachable from the fixed six-rig fixture.
+  { name: 'tier-showcase-4', width: 1440, height: 900, scale: 2, rigs: 4, scrollTo: 'Rigs' },
+  { name: 'tier-compact-15', width: 1440, height: 900, scale: 2, rigs: 15, scrollTo: 'Rigs' },
+  { name: 'tier-dense-106', width: 1440, height: 900, scale: 2, rigs: 106, scrollTo: 'Rigs' },
+  { name: 'tier-dense-mobile', width: 414, height: 820, scale: 2, rigs: 106, scrollTo: 'Rigs' },
 ];
 
 for (const shot of shots) {
@@ -78,7 +85,8 @@ for (const shot of shots) {
     deviceScaleFactor: shot.scale,
     reducedMotion: 'reduce',
   });
-  await page.goto(`http://localhost:${PORT}${BASE}?u=demo`, { waitUntil: 'networkidle' });
+  const query = `?u=demo${shot.rigs === undefined ? '' : `&rigs=${shot.rigs}`}`;
+  await page.goto(`http://localhost:${PORT}${BASE}${query}`, { waitUntil: 'networkidle' });
   // Let webfonts settle and the odometer finish its opening roll.
   await page.waitForTimeout(2500);
 

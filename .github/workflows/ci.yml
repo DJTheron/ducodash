@@ -1,0 +1,40 @@
+name: CI
+
+# Deliberately separate from deploy.yml. Deployment needs `pages` and `id-token`
+# write permissions; validation needs none, so it runs read-only and on every branch
+# and pull request rather than only on main.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Unit tests only. The live integration test is gated behind LIVE=1 so CI never
+      # depends on third-party chain RPCs being up.
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

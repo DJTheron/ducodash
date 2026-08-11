@@ -11,6 +11,7 @@ import { nominalPrice, readVenuePrices } from '../exchange/prices';
 import type { ExchangeReport } from '../exchange/types';
 import { computeWalletStats, type WalletStats } from '../stats/derive';
 import {
+  makeMockMiners,
   mockHistoricPrices,
   mockStatistics,
   mockTransactions,
@@ -27,6 +28,19 @@ export const DEMO_USER = 'demo';
 export function isMockMode(username: string): boolean {
   if (username.toLowerCase() === DEMO_USER) return true;
   return new URLSearchParams(window.location.search).get('mock') === '1';
+}
+
+/**
+ * `?rigs=N` overrides the demo fleet size. A review affordance: card density
+ * switches tier at 6 and 24 rigs, and those layouts can't be inspected against a
+ * fixture that is permanently six rigs long. Capped so a typo can't try to render
+ * ten thousand cards.
+ */
+function mockFleetSize(): number | null {
+  const raw = new URLSearchParams(window.location.search).get('rigs');
+  if (raw === null) return null;
+  const count = Number(raw);
+  return Number.isFinite(count) && count >= 0 ? Math.min(500, Math.floor(count)) : null;
 }
 
 /** Username from `?u=`, falling back to the last one used, then the demo account. */
@@ -101,7 +115,8 @@ export function useDashboard(username: string): DashboardState {
     (async () => {
       try {
         if (mock) {
-          setUser(mockUser);
+          const fleet = mockFleetSize();
+          setUser(fleet === null ? mockUser : { ...mockUser, miners: makeMockMiners(fleet) });
           setStatistics(mockStatistics);
           setTransactions(mockTransactions);
           setHistoricPrices(mockHistoricPrices);

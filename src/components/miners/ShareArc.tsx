@@ -1,4 +1,4 @@
-import { formatCompact, formatPercent } from '../../lib/format';
+import { formatCompact } from '../../lib/format';
 
 /**
  * Accepted-versus-rejected shares as a ring.
@@ -67,8 +67,13 @@ export function ShareArc({
           >
             {formatCompact(accepted)}
           </span>
+          {/*
+            A count, not a percentage. A rig with 12 rejects out of 48,000 renders as
+            "0.0% rej", which reads as "none" while sitting next to rigs labelled
+            "shares" that genuinely have none — the count never makes that mistake.
+          */}
           <span className="mt-0.5 text-ink-muted" style={{ fontSize: Math.max(8, size * 0.115) }}>
-            {rejected > 0 ? formatPercent(1 - rate, 1) + ' rej' : 'shares'}
+            {rejected > 0 ? `${formatCompact(rejected)} rej` : 'shares'}
           </span>
         </div>
       )}

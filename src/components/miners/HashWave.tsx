@@ -49,13 +49,20 @@ export function HashWave({
     return () => cancelAnimationFrame(frame.current);
   }, [speed, reduced]);
 
-  // Relative loudness, on a log scale: rigs on this network span four orders of
-  // magnitude (a 268 H/s Uno beside a 1.3 MH/s desktop), so a linear amplitude
-  // would flatten every microcontroller to a straight line.
+  /*
+    Relative loudness on a log scale: rigs span four orders of magnitude (a 268 H/s
+    Uno beside a 1.3 MH/s desktop), so a linear amplitude flattens every
+    microcontroller to a straight line.
+
+    Log alone over-compresses in the other direction though — it puts that Uno at
+    0.40 of the desktop's amplitude, which looks nearly the same on a 40px-tall
+    wave. The exponent stretches the spread back out so the difference is legible,
+    and the floor keeps the smallest rig from flatlining entirely.
+  */
   const relative =
     peak > 0 && hashrate > 0
-      ? Math.min(1, Math.max(0.12, Math.log10(1 + hashrate) / Math.log10(1 + peak)))
-      : 0.12;
+      ? Math.min(1, Math.max(0.1, (Math.log10(1 + hashrate) / Math.log10(1 + peak)) ** 2.2))
+      : 0.1;
 
   const mid = height / 2;
   const amplitude = (height / 2 - 2) * relative;

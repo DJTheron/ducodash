@@ -33,6 +33,37 @@ const USE_COLORS: Record<string, string> = {
 
 type Segment = { key: string; label: string; value: number; color: string };
 
+/*
+  Below this share a segment renders as a 2–3px shard between 2px surface gaps —
+  indistinguishable from a rendering artefact, and it makes the bar look broken
+  rather than detailed. Anything under it is pooled into one "Other" slice.
+
+  The pooling is cosmetic and applies to the bar only: the legend below still lists
+  every category with its true value and percentage, so nothing is hidden — the
+  small categories just stop fighting for pixels they can't use.
+*/
+const MIN_VISIBLE_SHARE = 0.01;
+const OTHER_COLOR = '#dcd7c9';
+
+/** Fold sub-threshold segments into a single trailing slice, for the bar only. */
+function foldTinySegments(segments: Segment[], total: number): Segment[] {
+  if (total <= 0) return segments;
+  const major = segments.filter((s) => s.value / total >= MIN_VISIBLE_SHARE);
+  const minor = segments.filter((s) => s.value / total < MIN_VISIBLE_SHARE);
+  if (minor.length === 0) return major;
+
+  const pooled = minor.reduce((sum, s) => sum + s.value, 0);
+  return [
+    ...major,
+    {
+      key: '__other',
+      label: minor.map((s) => s.label).join(', '),
+      value: pooled,
+      color: OTHER_COLOR,
+    },
+  ];
+}
+
 function Bar({
   segments,
   total,
@@ -55,7 +86,7 @@ function Bar({
 
       {/* gap-[2px] is the surface gap that separates touching segments. */}
       <div className="flex h-7 w-full gap-[2px] overflow-hidden rounded-md">
-        {segments.map((s) => (
+        {foldTinySegments(segments, total).map((s) => (
           <div
             key={s.key}
             className="h-full first:rounded-l-md last:rounded-r-md"

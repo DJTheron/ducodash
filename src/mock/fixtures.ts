@@ -22,23 +22,42 @@ const RIGS: [string, string, number, number, number, number][] = [
   ['Official Web Miner 3.4', 'laptop-tab', 12_050, 6.700, 2_311, 44],
 ];
 
-export const mockMiners: Miner[] = RIGS.map(
-  ([software, identifier, hashrate, sharetime, accepted, rejected], i) => ({
-    threadid: `demo${i.toString(16).padStart(12, '0')}`,
-    username: 'demo',
-    hashrate,
-    sharetime,
-    accepted,
-    rejected,
-    diff: hashrate > 500_000 ? 400_000 : hashrate > 50_000 ? 8_200 : 1_200,
-    software,
-    identifier,
-    algorithm: 'DUCO-S1',
-    pool: i % 3 === 0 ? 'south-america-node-1' : 'master-server-1',
-    sharerate: Math.round(60 / sharetime),
-    wd: String(1000 + i * 317),
-  }),
-);
+/**
+ * Build a demo fleet of any size by cycling the templates above.
+ *
+ * Exists so the three card-density tiers can actually be rendered and reviewed —
+ * with a fixed six-rig fixture the compact and dense layouts are unreachable.
+ * Clones are varied deterministically (hashrate, share counts, share time) rather
+ * than duplicated, so the wave amplitudes and share rings differ card to card the
+ * way a real fleet's would.
+ */
+export function makeMockMiners(count: number): Miner[] {
+  return Array.from({ length: Math.max(0, count) }, (_, i) => {
+    const [software, name, hashrate, sharetime, accepted, rejected] = RIGS[i % RIGS.length]!;
+    const cycle = Math.floor(i / RIGS.length);
+    // Deterministic spread, roughly ±35% on rate and a widening share history.
+    const wobble = 1 + (((i * 37) % 71) / 71 - 0.5) * 0.7;
+    const rate = Math.max(1, Math.round(hashrate * wobble));
+
+    return {
+      threadid: `demo${i.toString(16).padStart(12, '0')}`,
+      username: 'demo',
+      hashrate: rate,
+      sharetime: Number((sharetime * (2 - wobble)).toFixed(3)),
+      accepted: Math.round(accepted * (0.4 + ((i * 53) % 100) / 100)),
+      rejected: Math.round(rejected * (((i * 29) % 40) / 20)),
+      diff: rate > 500_000 ? 400_000 : rate > 50_000 ? 8_200 : 1_200,
+      software,
+      identifier: cycle === 0 ? name : `${name}-${cycle + 1}`,
+      algorithm: 'DUCO-S1',
+      pool: i % 3 === 0 ? 'south-america-node-1' : 'master-server-1',
+      sharerate: Math.round(60 / sharetime),
+      wd: String(1000 + i * 317),
+    };
+  });
+}
+
+export const mockMiners: Miner[] = makeMockMiners(RIGS.length);
 
 /** Deterministic 40-hex digest, so demo hashes look like the real SHA-1 ones. */
 function fakeHash(seed: number): string {

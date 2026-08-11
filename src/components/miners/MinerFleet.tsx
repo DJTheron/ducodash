@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Miner } from '../../api/schema';
 import { formatCompact, formatDuco, formatHashrate, formatPercent } from '../../lib/format';
 import { classifyMiner, densityFor, summariseFleet, type Density } from '../../miners/classify';
@@ -23,18 +23,34 @@ const TIER = {
     padding: 'p-5',
   },
   compact: {
-    grid: 'grid-cols-2 lg:grid-cols-3',
+    // 4 columns on wide screens: at 3 the cards stretch to ~500px for ~170px of
+    // content and the wave becomes a long flat ribbon.
+    grid: 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
     arc: 58,
     wave: { width: 128, height: 30 },
     padding: 'p-3.5',
   },
   dense: {
-    grid: 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8',
-    arc: 40,
+    // 2 columns on phones, not 3: at 3 a 414px screen gives ~110px cards and every
+    // rig name truncates to "workshop-p…", which is no name at all.
+    grid: 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8',
+    arc: 0,
     wave: { width: 76, height: 20 },
     padding: 'p-2.5',
   },
 } satisfies Record<Density, unknown>;
+
+/** A rig worth looking at: rejecting materially more than the fleet norm. */
+const REJECT_ALERT = 0.02;
+
+/**
+ * Cards shown before the dense tier folds behind an expander.
+ *
+ * A hundred rigs at two columns is fifty rows of phone scrolling. The fleet summary
+ * above already answers "how is it doing", so the grid leads with the fastest rigs
+ * and keeps the rest one tap away.
+ */
+const DENSE_VISIBLE = 48;
 
 function MinerCard({
   miner,
@@ -51,6 +67,8 @@ function MinerCard({
   const kind = classifyMiner(miner);
   const name = miner.identifier && miner.identifier !== 'None' ? miner.identifier : kind;
   const dense = density === 'dense';
+  const shares = miner.accepted + miner.rejected;
+  const rejectRate = shares > 0 ? miner.rejected / shares : 0;
 
   return (
     <article
@@ -78,19 +96,34 @@ function MinerCard({
         )}
       </div>
 
+      {/*
+        No share ring in the dense tier. At 40px it carries no readable value — the
+        per-rig share count isn't scannable across a hundred cards anyway, and the
+        fleet total is already in the section header. The space goes to the rig's
+        name and rate, and rejects switch to exception-based: only a rig actually
+        misbehaving gets a marker, so problems stand out of the wall instead of
+        every card wearing an identical ring.
+      */}
       <div className={`flex items-center gap-3 ${dense ? 'justify-between' : ''}`}>
-        <ShareArc
-          accepted={miner.accepted}
-          rejected={miner.rejected}
-          size={tier.arc}
-          label={!dense}
-        />
+        {!dense && (
+          <ShareArc accepted={miner.accepted} rejected={miner.rejected} size={tier.arc} />
+        )}
         <div className="min-w-0 flex-1">
-          <div
-            className={`tnum font-display text-ink ${dense ? 'text-sm' : 'text-xl'}`}
-            title="Current hashrate"
-          >
-            {formatHashrate(miner.hashrate)}
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className={`tnum font-display text-ink ${dense ? 'text-sm' : 'text-xl'}`}
+              title="Current hashrate"
+            >
+              {formatHashrate(miner.hashrate)}
+            </span>
+            {dense && rejectRate > REJECT_ALERT && (
+              <span
+                className="text-[10px] font-semibold text-critical"
+                title={`${formatCompact(miner.rejected)} rejected of ${formatCompact(miner.accepted + miner.rejected)} shares`}
+              >
+                ▲ {formatPercent(rejectRate, 0)}
+              </span>
+            )}
           </div>
           <HashWave
             hashrate={miner.hashrate}
@@ -143,6 +176,11 @@ export function MinerFleet({
     [miners],
   );
 
+  const [expanded, setExpanded] = useState(false);
+  const capped = density === 'dense' && !expanded && sorted.length > DENSE_VISIBLE;
+  const visible = capped ? sorted.slice(0, DENSE_VISIBLE) : sorted;
+  const hidden = sorted.length - visible.length;
+
   if (miners.length === 0) {
     return (
       <Section title="Rigs" subtitle="No miners are reporting for this account right now.">
@@ -176,7 +214,7 @@ export function MinerFleet({
       </div>
 
       <div className={`grid gap-3 ${tier.grid}`}>
-        {sorted.map((miner) => (
+        {visible.map((miner) => (
           <MinerCard
             key={miner.threadid}
             miner={miner}
@@ -186,6 +224,16 @@ export function MinerFleet({
           />
         ))}
       </div>
+
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="mt-3 w-full rounded-lg border border-rule bg-paper-card py-2 text-sm font-medium text-ink-2 transition hover:border-accent hover:text-ink"
+        >
+          Show all {summary.count} rigs ({hidden} slower {hidden === 1 ? 'rig' : 'rigs'} hidden)
+        </button>
+      )}
     </Section>
   );
 }

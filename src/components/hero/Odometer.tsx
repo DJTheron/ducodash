@@ -45,7 +45,19 @@ export function Odometer({ value, className }: { value: string; className?: stri
       <span className="sr-only">{value}</span>
       <span aria-hidden="true" className="select-none">
         {value.split('').map((char, i) =>
-          /\d/.test(char) ? <Digit key={i} value={Number(char)} /> : <span key={i}>{char}</span>,
+          /\d/.test(char) ? (
+            <Digit key={i} value={Number(char)} />
+          ) : (
+            /*
+              Optical correction for the separators. Instrument Serif's comma has a
+              long, low descender that at display sizes reads as a dropped glyph
+              rather than punctuation. Nudged up a fraction of an em — the face is
+              left alone, only its placement beside the digits is adjusted.
+            */
+            <span key={i} className="inline-block" style={{ transform: 'translateY(-0.06em)' }}>
+              {char}
+            </span>
+          ),
         )}
       </span>
     </span>

@@ -1,0 +1,125 @@
+@import 'tailwindcss';
+@import './fonts.css';
+
+/*
+  Paper theme — a single, committed light treatment. Warm ivory ground, near-black
+  ink, DUCO orange as the one accent. Deliberately light-only: every colour below is
+  painted explicitly so an OS dark preference can't half-invert the page.
+
+  The data-viz slots (--series-*, grid, baseline, muted) are validated as a
+  categorical set against the --paper-card surface. Re-run the validator before
+  changing any of them.
+*/
+
+@theme {
+  --color-paper: #f2efe7;
+  --color-paper-card: #fbfaf6;
+  --color-paper-sunk: #ece8dd;
+
+  --color-ink: #1a1915;
+  --color-ink-2: #57544b;
+  --color-ink-muted: #8a8579;
+
+  --color-rule: #e4e0d5;
+  --color-baseline: #cfcabc;
+
+  --color-accent: #eb6834;
+  --color-accent-soft: #f7d9cb;
+
+  /* Categorical slots, fixed order. Never cycled, never reassigned by rank. */
+  --color-series-1: #eb6834;
+  --color-series-2: #2a78d6;
+  --color-series-3: #4a3aa7;
+  --color-series-4: #1baf7a;
+  --color-series-5: #eda100;
+  --color-series-6: #e34948;
+
+  --color-good: #0ca30c;
+  --color-good-text: #006300;
+  --color-warning: #fab219;
+  --color-critical: #d03b3b;
+
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+  Paper grain. One tiling fractal-noise SVG over the whole page at very low alpha —
+  it's what stops a flat cream background reading as "unstyled white-ish". Fixed so
+  it doesn't swim while scrolling, and non-interactive.
+*/
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.42;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Hairline card. Used everywhere; kept as one class so the ring stays consistent. */
+@utility card {
+  background: var(--color-paper-card);
+  border: 1px solid var(--color-rule);
+  border-radius: 14px;
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -5,7 +5,8 @@ import {
   fetchStatistics,
   fetchUser,
 } from '../api/endpoints';
-import type { HistoricPrice, Miner, Statistics, Transaction, UserBundle } from '../api/schema';
+import type { HistoricPrice, Statistics, Transaction, UserBundle } from '../api/schema';
+import type { Rig } from '../miners/classify';
 import { buildExchangeReport } from '../exchange/report';
 import { nominalPrice, readVenuePrices } from '../exchange/prices';
 import type { ExchangeReport } from '../exchange/types';
@@ -220,29 +221,38 @@ export function useDashboard(username: string): DashboardState {
 }
 
 /**
- * Rolling per-rig hashrate samples, keyed by thread id.
+ * Rolling hashrate samples per rig.
  *
- * The API only reports an instantaneous hashrate, so any trend line has to be
- * accumulated client-side over the session. Deliberately not persisted — a stale
- * curve from yesterday would be worse than no curve.
+ * The API reports only an instantaneous rate and keeps no per-rig history, so a
+ * trend line has to be accumulated client-side while the page is open. That is why
+ * a freshly loaded card shows no line for the first couple of refreshes: there is
+ * genuinely nothing measured yet, and drawing something anyway is what the previous
+ * synthetic waveform did wrong.
+ *
+ * Deliberately not persisted — a stale curve from yesterday is worse than no curve.
  */
-export function useHashrateHistory(miners: Miner[], depth = 40): Map<string, number[]> {
+export function useHashrateHistory(rigs: Rig[], depth = 40): Map<string, number[]> {
   const [history, setHistory] = useState<Map<string, number[]>>(new Map());
 
+  // Sample only when the readings actually change; re-renders must not fabricate
+  // extra data points out of the same poll.
+  const signature = rigs.map((rig) => `${rig.id}:${rig.hashrate}`).join('|');
+
   useEffect(() => {
-    if (miners.length === 0) return;
+    if (rigs.length === 0) return;
     setHistory((prev) => {
       const next = new Map(prev);
-      for (const miner of miners) {
-        const series = [...(next.get(miner.threadid) ?? []), miner.hashrate];
-        next.set(miner.threadid, series.slice(-depth));
+      for (const rig of rigs) {
+        const series = [...(next.get(rig.id) ?? []), rig.hashrate];
+        next.set(rig.id, series.slice(-depth));
       }
       // Drop rigs that have gone offline so the map can't grow without bound.
-      const live = new Set(miners.map((m) => m.threadid));
+      const live = new Set(rigs.map((r) => r.id));
       for (const key of next.keys()) if (!live.has(key)) next.delete(key);
       return next;
     });
-  }, [miners, depth]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, depth]);
 
   return history;
 }

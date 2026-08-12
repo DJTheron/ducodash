@@ -8,7 +8,7 @@ import { TransactionFeed } from './components/TransactionFeed';
 import { NetworkPanel } from './components/NetworkPanel';
 import { UsernameBar } from './components/UsernameBar';
 import { realisedValue } from './exchange/report';
-import { summariseFleet } from './miners/classify';
+import { groupIntoRigs, summariseFleet } from './miners/classify';
 import {
   DEMO_USER,
   isMockMode,
@@ -22,8 +22,10 @@ export default function App() {
   const [username, setUsername] = useState(readInitialUsername);
   const state = useDashboard(username);
   const miners = state.user?.miners ?? [];
-  const hashHistory = useHashrateHistory(miners);
-  const fleet = useMemo(() => summariseFleet(miners), [miners]);
+  // Worker threads collapsed into physical devices; see groupIntoRigs.
+  const rigs = useMemo(() => groupIntoRigs(miners), [miners]);
+  const hashHistory = useHashrateHistory(rigs);
+  const fleet = useMemo(() => summariseFleet(rigs), [rigs]);
 
   const changeUser = (value: string) => {
     persistUsername(value);
@@ -63,7 +65,7 @@ export default function App() {
 
           <RealisableValue report={state.exchange} balance={state.user.balance.balance} />
 
-          <MinerFleet miners={miners} history={hashHistory} />
+          <MinerFleet rigs={rigs} history={hashHistory} />
 
           {state.wallet && (
             <StatsGrid

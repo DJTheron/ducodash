@@ -1,106 +1,96 @@
-import { useEffect, useRef, useState } from 'react';
-
 /**
- * A running waveform for one rig.
+ * A rig's hashrate over time — measured, not illustrated.
  *
- * The API reports an instantaneous hashrate and a share time, with no waveform of
- * any kind — this is an *expressive* encoding of those two numbers, not measured
- * data, so it never carries an axis or a value label: amplitude scales with the
- * rig's hashrate relative to the fleet's fastest, and the wave travels at a rate
- * set by its share time. A fast rig visibly runs faster than a slow one.
+ * This deliberately draws nothing until there is something real to draw. An earlier
+ * version animated a sine wave whose amplitude and speed were derived from the
+ * rig's hashrate and share time. It looked like a data trace and wasn't one, which
+ * is exactly the kind of decorative fiction this dashboard exists to argue against.
  *
- * The measured series is the sparkline drawn behind it, which *is* real sampled
- * data (see `useHashrateHistory`).
+ * The series is sampled client-side while the page is open (the API reports only an
+ * instantaneous rate and keeps no per-rig history), so it starts empty and fills in
+ * as polls come back.
  */
 export function HashWave({
-  hashrate,
-  peak,
-  sharetime,
   history,
   width = 132,
   height = 34,
 }: {
-  hashrate: number;
-  peak: number;
-  sharetime: number;
   history?: number[];
   width?: number;
   height?: number;
 }) {
-  const [phase, setPhase] = useState(0);
-  const frame = useRef(0);
-  const reduced =
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const series = history ?? [];
 
-  // Faster share time -> faster travel. Clamped so a 0.4s PC miner doesn't strobe.
-  const speed = Math.min(2.4, Math.max(0.35, 1.6 / Math.max(0.3, sharetime)));
-
-  useEffect(() => {
-    if (reduced) return undefined;
-    let last = performance.now();
-    const tick = (now: number) => {
-      const delta = (now - last) / 1000;
-      last = now;
-      setPhase((p) => (p + delta * speed) % (Math.PI * 2));
-      frame.current = requestAnimationFrame(tick);
-    };
-    frame.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame.current);
-  }, [speed, reduced]);
-
-  /*
-    Relative loudness on a log scale: rigs span four orders of magnitude (a 268 H/s
-    Uno beside a 1.3 MH/s desktop), so a linear amplitude flattens every
-    microcontroller to a straight line.
-
-    Log alone over-compresses in the other direction though — it puts that Uno at
-    0.40 of the desktop's amplitude, which looks nearly the same on a 40px-tall
-    wave. The exponent stretches the spread back out so the difference is legible,
-    and the floor keeps the smallest rig from flatlining entirely.
-  */
-  const relative =
-    peak > 0 && hashrate > 0
-      ? Math.min(1, Math.max(0.1, (Math.log10(1 + hashrate) / Math.log10(1 + peak)) ** 2.2))
-      : 0.1;
-
-  const mid = height / 2;
-  const amplitude = (height / 2 - 2) * relative;
-  const points: string[] = [];
-  const steps = 44;
-  for (let i = 0; i <= steps; i++) {
-    const x = (i / steps) * width;
-    const t = (i / steps) * Math.PI * 4 + phase;
-    // Two summed harmonics keep it from looking like a pure sine.
-    const y = mid - (Math.sin(t) * 0.72 + Math.sin(t * 2.3) * 0.28) * amplitude;
-    points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  // Two points is a line between two guesses, not a trend. Hold until there's shape.
+  if (series.length < 3) {
+    return (
+      <svg
+        className="w-full"
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="Not enough samples yet to show a hashrate trend"
+      >
+        <title>Sampling — a trend appears after a few refreshes</title>
+        <line
+          x1={0}
+          x2={width}
+          y1={height / 2}
+          y2={height / 2}
+          stroke="var(--color-rule)"
+          strokeWidth={1}
+          strokeDasharray="3 4"
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* Say why it's empty. An unexplained dashed line reads as a broken chart. */}
+        {height >= 26 && (
+          <text
+            x={width / 2}
+            y={height / 2 - 5}
+            textAnchor="middle"
+            fontSize={9}
+            fill="var(--color-ink-muted)"
+          >
+            sampling…
+          </text>
+        )}
+      </svg>
+    );
   }
 
-  const spark = sparkPath(history ?? [], width, height);
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const mean = series.reduce((a, b) => a + b, 0) / series.length;
 
   /*
-    Stretches to whatever width the card gives it. `preserveAspectRatio="none"`
-    scales x and y independently, which would normally smear the stroke — hence
-    `vectorEffect="non-scaling-stroke"`, so the line keeps its weight at any width.
+    Normalise against a floor of ±5% around the mean rather than the raw min/max.
+    Self-normalising to the observed range would blow a rig holding steady between
+    80.9 and 81.2 kH/s up into a dramatic mountain range — technically the data,
+    but a wildly misleading picture of a rig that is in fact rock stable.
   */
+  const band = Math.max(max - min, Math.abs(mean) * 0.05, 1e-9);
+  const mid = (max + min) / 2;
+  const lo = mid - band / 2;
+
+  const points = series.map((value, i) => {
+    const x = (i / (series.length - 1)) * width;
+    const y = height - 2 - ((value - lo) / band) * (height - 4);
+    return `${x.toFixed(1)},${Math.max(2, Math.min(height - 2, y)).toFixed(1)}`;
+  });
+
+  const last = series[series.length - 1]!;
+
   return (
     <svg
       className="w-full"
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
-      aria-hidden="true"
+      role="img"
+      aria-label={`Hashrate across the last ${series.length} samples`}
     >
-      {spark && (
-        <path
-          d={spark}
-          fill="none"
-          stroke="var(--color-baseline)"
-          strokeWidth={1}
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      )}
+      <title>{`${series.length} samples · low ${min.toFixed(0)} · high ${max.toFixed(0)} H/s`}</title>
       <polyline
         points={points.join(' ')}
         fill="none"
@@ -109,23 +99,15 @@ export function HashWave({
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
-        opacity={0.9}
+      />
+      {/* End marker, so the current sample is locatable on a busy line. */}
+      <circle
+        cx={width}
+        cy={Math.max(2, Math.min(height - 2, height - 2 - ((last - lo) / band) * (height - 4)))}
+        r={2}
+        fill="var(--color-accent)"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
-}
-
-/** Sampled hashrate history, normalised to the panel. */
-function sparkPath(series: number[], width: number, height: number): string | null {
-  if (series.length < 3) return null;
-  const min = Math.min(...series);
-  const max = Math.max(...series);
-  const span = max - min || 1;
-  return series
-    .map((value, i) => {
-      const x = (i / (series.length - 1)) * width;
-      const y = height - 2 - ((value - min) / span) * (height - 4);
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
 }

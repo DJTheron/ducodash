@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { Miner } from '../../api/schema';
 import { formatCompact, formatDuco, formatHashrate, formatPercent } from '../../lib/format';
-import { classifyMiner, densityFor, summariseFleet, type Density } from '../../miners/classify';
+import { densityFor, summariseFleet, type Density, type Rig } from '../../miners/classify';
 import { HashWave } from './HashWave';
 import { MinerGlyph } from './MinerGlyph';
 import { ShareArc } from './ShareArc';
@@ -53,27 +52,24 @@ const REJECT_ALERT = 0.02;
 const DENSE_VISIBLE = 48;
 
 function MinerCard({
-  miner,
-  peak,
+  rig,
   density,
   history,
 }: {
-  miner: Miner;
-  peak: number;
+  rig: Rig;
   density: Density;
   history?: number[];
 }) {
   const tier = TIER[density];
-  const kind = classifyMiner(miner);
-  const name = miner.identifier && miner.identifier !== 'None' ? miner.identifier : kind;
+  const { kind, name } = rig;
   const dense = density === 'dense';
-  const shares = miner.accepted + miner.rejected;
-  const rejectRate = shares > 0 ? miner.rejected / shares : 0;
+  const shares = rig.accepted + rig.rejected;
+  const rejectRate = shares > 0 ? rig.rejected / shares : 0;
 
   return (
     <article
       className={`card ${tier.padding} flex flex-col gap-2 transition hover:border-accent/50`}
-      title={`${miner.software} · ${formatHashrate(miner.hashrate)} · ${formatCompact(miner.accepted)} shares · difficulty ${formatCompact(miner.diff)}${miner.pool ? ` · ${miner.pool}` : ''}`}
+      title={`${rig.software} · ${formatHashrate(rig.hashrate)} across ${rig.threads} ${rig.threads === 1 ? 'thread' : 'threads'} · ${formatCompact(rig.accepted)} shares · difficulty ${formatCompact(rig.diff)}${rig.pool ? ` · ${rig.pool}` : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -84,10 +80,24 @@ function MinerCard({
             >
               {name}
             </span>
+            {/*
+              A multi-core rig reports one worker per core. Showing the thread count
+              explains why its hashrate is a multiple of a single thread's, instead
+              of leaving the owner to wonder why they appear to own twice the
+              hardware they do.
+            */}
+            {rig.threads > 1 && (
+              <span
+                className="shrink-0 rounded bg-paper-sunk px-1 text-[10px] font-semibold text-ink-2"
+                title={`${rig.threads} worker threads on this device`}
+              >
+                ×{rig.threads}
+              </span>
+            )}
           </div>
           {!dense && (
-            <p className="mt-0.5 truncate text-xs text-ink-muted" title={miner.software}>
-              {miner.software}
+            <p className="mt-0.5 truncate text-xs text-ink-muted" title={rig.software}>
+              {rig.software}
             </p>
           )}
         </div>
@@ -105,34 +115,29 @@ function MinerCard({
         every card wearing an identical ring.
       */}
       <div className={`flex items-center gap-3 ${dense ? 'justify-between' : ''}`}>
-        {!dense && (
-          <ShareArc accepted={miner.accepted} rejected={miner.rejected} size={tier.arc} />
-        )}
+        {!dense && <ShareArc accepted={rig.accepted} rejected={rig.rejected} size={tier.arc} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1.5">
             <span
               className={`tnum font-display text-ink ${dense ? 'text-sm' : 'text-xl'}`}
-              title="Current hashrate"
+              title={
+                rig.threads > 1
+                  ? `Combined across ${rig.threads} threads`
+                  : 'Current hashrate'
+              }
             >
-              {formatHashrate(miner.hashrate)}
+              {formatHashrate(rig.hashrate)}
             </span>
             {dense && rejectRate > REJECT_ALERT && (
               <span
                 className="text-[10px] font-semibold text-critical"
-                title={`${formatCompact(miner.rejected)} rejected of ${formatCompact(miner.accepted + miner.rejected)} shares`}
+                title={`${formatCompact(rig.rejected)} rejected of ${formatCompact(shares)} shares`}
               >
                 ▲ {formatPercent(rejectRate, 0)}
               </span>
             )}
           </div>
-          <HashWave
-            hashrate={miner.hashrate}
-            peak={peak}
-            sharetime={miner.sharetime}
-            history={history}
-            width={tier.wave.width}
-            height={tier.wave.height}
-          />
+          <HashWave history={history} width={tier.wave.width} height={tier.wave.height} />
         </div>
       </div>
 
@@ -140,15 +145,15 @@ function MinerCard({
         <dl className="mt-1 grid grid-cols-3 gap-2 border-t border-rule pt-2.5 text-xs">
           <div>
             <dt className="text-ink-muted">Difficulty</dt>
-            <dd className="tnum mt-0.5 text-ink-2">{formatCompact(miner.diff)}</dd>
+            <dd className="tnum mt-0.5 text-ink-2">{formatCompact(rig.diff)}</dd>
           </div>
           <div>
             <dt className="text-ink-muted">Share time</dt>
-            <dd className="tnum mt-0.5 text-ink-2">{miner.sharetime.toFixed(2)}s</dd>
+            <dd className="tnum mt-0.5 text-ink-2">{rig.sharetime.toFixed(2)}s</dd>
           </div>
           <div>
             <dt className="text-ink-muted">Rejected</dt>
-            <dd className="tnum mt-0.5 text-ink-2">{formatCompact(miner.rejected)}</dd>
+            <dd className="tnum mt-0.5 text-ink-2">{formatCompact(rig.rejected)}</dd>
           </div>
         </dl>
       )}
@@ -157,31 +162,24 @@ function MinerCard({
 }
 
 export function MinerFleet({
-  miners,
+  rigs,
   history,
 }: {
-  miners: Miner[];
+  rigs: Rig[];
   history: Map<string, number[]>;
 }) {
-  const summary = useMemo(() => summariseFleet(miners), [miners]);
-  const density = densityFor(miners.length);
+  const summary = useMemo(() => summariseFleet(rigs), [rigs]);
+  const density = densityFor(rigs.length);
   const tier = TIER[density];
 
-  // Fastest rig sets the amplitude scale for every wave, so the cards are
-  // comparable to each other rather than each self-normalised.
-  const peak = useMemo(() => Math.max(1, ...miners.map((m) => m.hashrate)), [miners]);
-
-  const sorted = useMemo(
-    () => [...miners].sort((a, b) => b.hashrate - a.hashrate),
-    [miners],
-  );
+  const sorted = useMemo(() => [...rigs].sort((a, b) => b.hashrate - a.hashrate), [rigs]);
 
   const [expanded, setExpanded] = useState(false);
   const capped = density === 'dense' && !expanded && sorted.length > DENSE_VISIBLE;
   const visible = capped ? sorted.slice(0, DENSE_VISIBLE) : sorted;
   const hidden = sorted.length - visible.length;
 
-  if (miners.length === 0) {
+  if (rigs.length === 0) {
     return (
       <Section title="Rigs" subtitle="No miners are reporting for this account right now.">
         <p className="card p-6 text-sm text-ink-2">
@@ -195,7 +193,12 @@ export function MinerFleet({
   return (
     <Section
       title="Rigs"
-      subtitle={`${summary.count} ${summary.count === 1 ? 'rig' : 'rigs'} · ${formatHashrate(summary.hashrate)} · ${formatDuco(summary.accepted, 0)} shares accepted`}
+      subtitle={
+        `${summary.count} ${summary.count === 1 ? 'rig' : 'rigs'}` +
+        // Only worth saying when they differ; on single-threaded fleets it's noise.
+        (summary.threads > summary.count ? ` · ${summary.threads} worker threads` : '') +
+        ` · ${formatHashrate(summary.hashrate)} · ${formatDuco(summary.accepted, 0)} shares accepted`
+      }
     >
       {/* Fleet composition. Doubles as the legend for the glyphs used on the cards. */}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -214,13 +217,12 @@ export function MinerFleet({
       </div>
 
       <div className={`grid gap-3 ${tier.grid}`}>
-        {visible.map((miner) => (
+        {visible.map((rig) => (
           <MinerCard
-            key={miner.threadid}
-            miner={miner}
-            peak={peak}
+            key={rig.id}
+            rig={rig}
             density={density}
-            history={history.get(miner.threadid)}
+            history={history.get(rig.id)}
           />
         ))}
       </div>

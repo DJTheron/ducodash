@@ -57,7 +57,26 @@ export function makeMockMiners(count: number): Miner[] {
   });
 }
 
-export const mockMiners: Miner[] = makeMockMiners(RIGS.length);
+export const mockMiners: Miner[] = [
+  ...makeMockMiners(RIGS.length),
+  /*
+    A second worker thread on the ESP32, sharing its identifier. Real dual-core
+    boards report one connection per core, and the demo needs to exercise that
+    grouping path — without it the "×2" badge and the rig-versus-thread distinction
+    would never appear in a review.
+  */
+  {
+    ...makeMockMiners(1)[0]!,
+    threadid: 'demo00000000ffff',
+    software: 'Official ESP32 Miner 4.3',
+    identifier: 'attic-esp32',
+    hashrate: 94_310,
+    sharetime: 2.977,
+    accepted: 47_115,
+    rejected: 9,
+    diff: 8_200,
+  },
+];
 
 /** Deterministic 40-hex digest, so demo hashes look like the real SHA-1 ones. */
 function fakeHash(seed: number): string {
